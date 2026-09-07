@@ -7,7 +7,6 @@ import { publicUser } from '../serializers';
 import { profileAggregates } from '../util/aggregates';
 import { startOfMonth } from '../util/format';
 import { issueSession } from '../auth/tokens';
-import { seedUserData } from '../seedUserData';
 
 const router = Router();
 
@@ -173,17 +172,6 @@ router.delete(
   }),
 );
 
-router.post(
-  '/users/:id/reseed',
-  asyncHandler(async (req, res) => {
-    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!user) throw new ApiError(404, 'not_found');
-    await seedUserData(user.id, true);
-    await audit(req, 'user.reseed', user.id);
-    res.status(204).end();
-  }),
-);
-
 /* ---------- Create a user directly ---------- */
 router.post(
   '/users',
@@ -194,7 +182,6 @@ router.post(
         password: z.string().min(8),
         name: z.string().optional(),
         role: z.enum(['user', 'admin']).default('user'),
-        seed: z.boolean().default(false),
       })
       .parse(req.body);
     const existing = await prisma.user.findUnique({ where: { email: b.email.toLowerCase() } });
@@ -208,7 +195,6 @@ router.post(
         verified: true,
       },
     });
-    if (b.seed) await seedUserData(user.id);
     await audit(req, 'user.create', user.id, { role: b.role });
     res.status(201).json(publicUser(user));
   }),

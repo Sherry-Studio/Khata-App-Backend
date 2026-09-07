@@ -398,5 +398,5 @@ async function transfer(fromId, toId, amount, note?) {
 - [ ] Settings: appearance persists; language patches `/me`; logout → Splash
 - [ ] Transfer sheet: From/To/amount, optimistic balance move, neutral Activity
       row, delete reverses both balances
-- [ ] No `services/seed` import anywhere; app runs on a fresh account (auto-seeded
-      demo dataset) and on a truly empty account (all empty states)
+- [ ] No `services/seed` import anywhere; a brand-new account has **zero** data —
+      every screen shows its empty state until the user adds an account / entry

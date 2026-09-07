@@ -18,21 +18,16 @@ Includes an **admin API** for user management, metrics, audit and broadcasts.
 ```bash
 cp .env.example .env      # then set DATABASE_URL (MongoDB), GEMINI_API_KEY, SMTP_*
 npm install
-npm run setup             # prisma db push + seed (admin + demo user with full dataset)
+npm run setup             # prisma db push + seed (admin account only)
 npm run dev               # http://localhost:4000/api/v1
 ```
 
 Requires a MongoDB replica set — MongoDB Atlas (any free M0 cluster) works out of
 the box; a bare local `mongod` does not (Prisma needs transactions).
 
-Seeded accounts:
-
-| Role  | Email             | Password      |
-| ----- | ----------------- | ------------- |
-| admin | `admin@khata.app` | `admin12345`  |
-| user  | `demo@khata.app`  | `demo12345`   |
-
-Change these via `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`.
+The seed creates **only the admin account** (`admin@khata.app` / `admin12345`,
+change via `ADMIN_EMAIL` / `ADMIN_PASSWORD`). New users sign up empty — no demo
+data.
 
 ## Scripts
 
@@ -43,7 +38,8 @@ Change these via `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`.
 | `npm start`         | Run compiled server                            |
 | `npm run db:push`   | Sync indexes to MongoDB                         |
 | `npm run db:reset`  | Force-resync (`prisma db push --force-reset`)   |
-| `npm run seed`      | Seed admin + demo user                          |
+| `npm run seed`      | Create the admin account                        |
+| `npm run db:wipe`   | Delete all data + all non-admin users           |
 | `npm run typecheck` | `tsc --noEmit`                                  |
 
 ## Alignment with BACKEND.md
@@ -99,8 +95,8 @@ Implemented, section by section:
   **To make it live:** set `AI_PROVIDER=gemini` and `GEMINI_API_KEY=...` in `.env`,
   restart. Nothing else changes.
 
-New verified users (and Google-OAuth first sign-ins) are auto-populated with the
-app's demo dataset via `src/seedUserData.ts` so the dashboard is never empty.
+New users start with **no data** — the app must render its empty states until
+the user adds their first account / transaction.
 
 ### Cross-cutting
 
@@ -116,13 +112,12 @@ app's demo dataset via `src/seedUserData.ts` so the dashboard is never empty.
 | --- | --- | --- |
 | GET | `/admin/metrics` | user / transaction / udhaar totals for a dashboard |
 | GET | `/admin/users?q&role&disabled&cursor&limit` | paged user search |
-| POST | `/admin/users` | create a user (`{email,password,name?,role,seed?}`) |
+| POST | `/admin/users` | create a user (`{email,password,name?,role}`) |
 | GET | `/admin/users/:id` | user detail + aggregates + row counts |
 | PATCH | `/admin/users/:id` | edit name/phone/income/verified/role |
 | POST | `/admin/users/:id/disable` \| `/enable` | toggle access (disable revokes refresh tokens) |
 | POST | `/admin/users/:id/reset-password` | set a new password (`{password}`) |
 | POST | `/admin/users/:id/impersonate` | mint a session for that user (support) |
-| POST | `/admin/users/:id/reseed` | wipe + reload the demo dataset |
 | DELETE | `/admin/users/:id` | hard-delete (cascades) |
 | GET | `/admin/transactions?userId&cursor&limit` | global transaction feed |
 | GET | `/admin/audit?cursor&limit` | audit log of admin actions |

@@ -6,7 +6,6 @@ import { env } from '../env';
 import { ApiError, asyncHandler } from '../http';
 import { issueSession, revokeRefreshToken, rotateRefreshToken } from '../auth/tokens';
 import { publicUser } from '../serializers';
-import { seedUserData } from '../seedUserData';
 import { sendOtpEmail } from '../mailer';
 
 const router = Router();
@@ -97,12 +96,10 @@ router.post(
       await prisma.user.update({ where: { id: user.id }, data: { otpAttempts: attempts } });
       throw new ApiError(400, 'invalid_otp', { attemptsLeft: Math.max(0, maxAttempts - attempts) });
     }
-    const firstVerify = !user.verified;
     await prisma.user.update({
       where: { id: user.id },
       data: { verified: true, otpCode: null, otpExpiresAt: null, otpAttempts: 0 },
     });
-    if (firstVerify) await seedUserData(user.id);
     const session = await issueSession(user.id);
     res.json({
       accessToken: session.accessToken,
@@ -189,15 +186,12 @@ router.post(
       }
     }
     let user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    let fresh = false;
     if (!user) {
       user = await prisma.user.create({
         data: { email: email.toLowerCase(), name, verified: true },
       });
-      fresh = true;
     }
     if (user.disabled) throw new ApiError(403, 'account_disabled');
-    if (fresh) await seedUserData(user.id);
     const session = await issueSession(user.id);
     res.json({
       accessToken: session.accessToken,

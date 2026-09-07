@@ -8,7 +8,8 @@ server code is required for the beta.
 - **Backend base URL:** `https://khata-app-backend-beta.vercel.app/api/v1`
 - **Who can use it:** any user whose `role` is `admin`. Seeded admin during
   alpha/beta: `admin@khata.app` / `admin12345` (change `ADMIN_PASSWORD` and
-  reseed, or `PATCH /admin/users/:id` a real teammate to `role: "admin"`).
+  re-run `npm run seed`, or `PATCH /admin/users/:id` a real teammate to
+  `role: "admin"`).
 - **Alpha → beta:** the alpha proved the API. The beta adds this panel so the
   team is not running `curl` by hand.
 
@@ -63,22 +64,21 @@ All paths below are under `/api/v1/admin`. All require an admin bearer token.
 | Method | Path | Query / Body | Response |
 | --- | --- | --- | --- |
 | GET | `/users` | `?q&role=user\|admin&disabled=true\|false&cursor&limit` (limit ≤ 100, default 25) | `{ items: User[], nextCursor }` |
-| POST | `/users` | `{ email, password (≥8), name?, role?, seed? }` | `User` (201) |
+| POST | `/users` | `{ email, password (≥8), name?, role? }` | `User` (201) |
 | GET | `/users/:id` | — | `User` + `language`, `appearance`, `aggregates`, `counts` |
 | PATCH | `/users/:id` | `{ name?, phone?, monthlyIncome?, verified?, role? }` | `User` |
 | POST | `/users/:id/disable` | — | `User` (also revokes their refresh tokens) |
 | POST | `/users/:id/enable` | — | `User` |
 | POST | `/users/:id/reset-password` | `{ password (≥8) }` | `204` (revokes their sessions) |
 | POST | `/users/:id/impersonate` | — | `{ accessToken, refreshToken, user }` |
-| POST | `/users/:id/reseed` | — | `204` (wipes + reloads that user's demo dataset) |
 | DELETE | `/users/:id` | — | `204` (hard delete, cascades all their data) |
 
 `User` (list + most responses):
 ```json
 {
   "id": "6a9f0bcb7525a931c93864ee",
-  "email": "demo@khata.app",
-  "name": "Shehryar",
+  "email": "user@example.com",
+  "name": "Ali Khan",
   "phone": "+92 300 4821764",
   "role": "user",
   "verified": true,
@@ -115,7 +115,7 @@ email_taken` on a duplicate.
 ```json
 {
   "items": [
-    { "id": "...", "userEmail": "demo@khata.app", "kind": "expense",
+    { "id": "...", "userEmail": "user@example.com", "kind": "expense",
       "name": "Cheezious", "amount": 850, "category": "Food",
       "method": "Cash", "date": "2026-09-05T15:42:00.000Z" }
   ],
@@ -142,7 +142,7 @@ Read-only. Use it to spot-check activity or investigate a support ticket.
 ```
 Every mutating admin action writes one row: `user.create`, `user.update`,
 `user.disable`, `user.enable`, `user.reset_password`, `user.impersonate`,
-`user.delete`, `user.reseed`, `notification.broadcast`.
+`user.delete`, `notification.broadcast`.
 
 ### Broadcast a notification
 
@@ -183,7 +183,7 @@ Minimum viable panel — five routes:
 | `/login` | email + password, reject non-admins | `POST /auth/login` |
 | `/` (Dashboard) | 6 stat cards: total / verified / disabled / new-this-month users, tx count, tx volume, udhaar outstanding | `GET /admin/metrics` |
 | `/users` | searchable, filterable, paginated table; row → detail; inline disable/enable | `GET /admin/users`, `POST .../disable\|enable` |
-| `/users/:id` | profile + aggregates + counts; actions: edit fields, verify, make/unmake admin, reset password, reseed, impersonate, delete (with confirm) | `GET/PATCH /admin/users/:id`, `POST .../reset-password\|reseed\|impersonate`, `DELETE` |
+| `/users/:id` | profile + aggregates + counts; actions: edit fields, verify, make/unmake admin, reset password, impersonate, delete (with confirm) | `GET/PATCH /admin/users/:id`, `POST .../reset-password\|impersonate`, `DELETE` |
 | `/audit` | reverse-chronological action log, paginated | `GET /admin/audit` |
 | `/broadcast` | compose kind/body/tone, target all or one user, show delivered count | `POST /admin/notifications/broadcast` |
 
@@ -199,7 +199,7 @@ Optional: `/transactions` global feed (support tool), `/users/new` create form.
    already recorded in the audit log.
 
 ### Destructive-action rules
-- `disable`, `reset-password`, `reseed`, `delete` → confirm dialog that types or
+- `disable`, `reset-password`, `delete` → confirm dialog that types or
   clicks through the user's email.
 - `delete` is irreversible (cascades transactions, udhaar, goals, etc.). Prefer
   `disable` during beta.

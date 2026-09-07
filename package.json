@@ -17,6 +17,7 @@
     "db:push": "prisma db push",
     "db:reset": "prisma db push --force-reset",
     "seed": "ts-node-dev --transpile-only src/seed.ts",
+    "db:wipe": "ts-node-dev --transpile-only src/scripts/reset-data.ts",
     "setup": "prisma db push && npm run seed",
     "typecheck": "tsc --noEmit"
   },
