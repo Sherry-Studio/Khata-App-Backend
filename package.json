@@ -4,6 +4,9 @@
   "private": true,
   "description": "Backend API for the Khata+ mobile app (aligned with BACKEND.md) + admin API",
   "main": "dist/server.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
