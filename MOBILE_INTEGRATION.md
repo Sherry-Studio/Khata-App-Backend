@@ -128,8 +128,10 @@ More → "Log out".
 | Google btn | `POST /auth/oauth/google {idToken}` → session | same as login |
 | Log out | `POST /auth/logout {refreshToken}` then `clearTokens()` | reset → Splash |
 
-`OTP_DEV_MODE` is **off** on the beta backend, so the code is emailed, not
-returned. (The demo error button in `OtpScreen` → wire to the real 400 above.)
+`OTP_DEV_MODE` is **off** on the beta backend. For now `OTP_STATIC=123456` is
+set, so **any OTP is `123456`** (email delivery isn't wired up yet). Remove that
+env var once real email works. (The demo error button in `OtpScreen` → wire to
+the real 400 above.)
 
 ---
 

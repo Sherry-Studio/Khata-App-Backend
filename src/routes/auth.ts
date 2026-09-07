@@ -12,7 +12,9 @@ import { sendOtpEmail } from '../mailer';
 const router = Router();
 
 function makeOtp(): { code: string; expiresAt: Date } {
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  // OTP_STATIC (e.g. "123456") makes every code fixed — beta/testing only,
+  // while real email delivery is not wired up.
+  const code = env.otpStatic || String(Math.floor(100000 + Math.random() * 900000));
   return { code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
 }
 
@@ -81,11 +83,13 @@ router.post(
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new ApiError(404, 'user_not_found');
     const maxAttempts = 5;
+    const staticOk = env.otpStatic !== '' && code === env.otpStatic;
     if (
-      !user.otpCode ||
-      !user.otpExpiresAt ||
-      user.otpExpiresAt < new Date() ||
-      user.otpCode !== code
+      !staticOk &&
+      (!user.otpCode ||
+        !user.otpExpiresAt ||
+        user.otpExpiresAt < new Date() ||
+        user.otpCode !== code)
     ) {
       const attempts = user.otpAttempts + 1;
       await prisma.user.update({ where: { id: user.id }, data: { otpAttempts: attempts } });
