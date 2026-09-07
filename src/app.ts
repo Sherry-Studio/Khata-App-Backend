@@ -23,6 +23,18 @@ export function createApp() {
   app.use(express.json());
   if (!env.isProd) app.use(morgan('dev'));
 
+  const base = `/${env.apiBase}/v1`;
+
+  app.get('/', (_req, res) =>
+    res.json({
+      name: 'Khata+ backend',
+      status: 'ok',
+      base,
+      health: `${base}/health`,
+      docs: 'see README.md',
+    }),
+  );
+
   const v1 = express.Router();
 
   v1.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
@@ -37,7 +49,7 @@ export function createApp() {
   v1.use('/ai', requireAuth, aiRoutes);
   v1.use('/admin', requireAuth, requireAdmin, adminRoutes);
 
-  app.use(`/${env.apiBase}/v1`, v1);
+  app.use(base, v1);
 
   app.use(notFound);
   app.use(errorHandler);
