@@ -66,7 +66,19 @@ Implemented, section by section:
   `/notifications` (+`/read`, `PATCH /notifications/preferences`), `POST /export`
   (returns `{url}` — file rendering is stubbed).
 - **AI assistant** — `POST /ai/ask` and `GET /ai/suggested-questions`, returning
-  the `{lead, rows, tail, action, followups}` render shape from real user data.
+  the `{lead, rows, tail, action, followups}` render shape. Two providers via
+  `AI_PROVIDER`:
+  - `rules` (default) — offline, deterministic answers from the user's own data.
+    Free, no key, no data leaves the server.
+  - `gemini` — Google Gemini Flash (free tier key at
+    <https://aistudio.google.com/apikey>). Only an **aggregated** snapshot
+    (`src/ai/context.ts`) is sent — never raw transactions, names, or phones.
+    Any error (missing key, timeout, bad JSON, rate limit) falls back to `rules`.
+  Per-user rate limit: `AI_RATE_PER_MIN` (default 10/min). The response includes
+  `provider` so you can see which answered. Keep the disclaimer line client-side.
+
+  **To make it live:** set `AI_PROVIDER=gemini` and `GEMINI_API_KEY=...` in `.env`,
+  restart. Nothing else changes.
 
 New verified users (and Google-OAuth first sign-ins) are auto-populated with the
 app's demo dataset via `src/seedUserData.ts` so the dashboard is never empty.

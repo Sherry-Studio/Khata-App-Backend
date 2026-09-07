@@ -19,4 +19,10 @@ export const env = {
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin12345',
   otpDevMode: (process.env.OTP_DEV_MODE ?? 'true') === 'true',
   isProd: process.env.NODE_ENV === 'production',
+
+  // AI assistant. provider: rules | gemini. gemini falls back to rules on any error.
+  aiProvider: (process.env.AI_PROVIDER ?? 'rules') as 'rules' | 'gemini',
+  geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+  aiRatePerMin: parseInt(process.env.AI_RATE_PER_MIN ?? '10', 10),
 };
