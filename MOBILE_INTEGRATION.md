@@ -279,7 +279,107 @@ to late beta. Send it to `/ai/ask` as `locale` so answers match.
 
 ---
 
-## 12. Per-screen done-check
+## 12. Account transfers (new — not in the alpha)
+
+Move money between the user's own accounts (e.g. NayaPay → SadaPay). Recorded as
+its own kind so it never touches `incomeThisMonth` / `expenseThisMonth` or
+category analytics.
+
+| Method | Path | Body / Query | Response |
+| --- | --- | --- | --- |
+| POST | `/transfers` | `{ fromAccountId, toAccountId, amount, date?, note? }` | `Transfer` (201) |
+| GET | `/transfers` | `?cursor&limit&accountId` | `{ items: Transfer[], nextCursor }` |
+| GET | `/transfers/:id` | — | `Transfer` |
+| DELETE | `/transfers/:id` | — | `204` (reverses both balances) |
+
+`Transfer` DTO:
+```json
+{
+  "id": "…", "kind": "transfer",
+  "fromAccountId": "…", "toAccountId": "…",
+  "from": "NayaPay", "to": "SadaPay",
+  "name": "NayaPay → SadaPay",
+  "amount": 5000, "note": "savings",
+  "icon": "card",
+  "date": "2026-09-08T12:00:00.000Z",
+  "dateLabel": "Today · 8 Sep", "time": "12:00 PM"
+}
+```
+
+Errors (all `400`): `same_account`, `invalid_account` (not one of the user's),
+`insufficient_funds` (from-balance < amount). The server moves both balances
+atomically — refetch `/accounts` (or apply the delta) after a success.
+
+### Store
+
+```ts
+// selector
+transfers: Transfer[]
+
+// action (optimistic)
+async function transfer(fromId, toId, amount, note?) {
+  const from = accountById(fromId), to = accountById(toId);
+  patchAccount(fromId, { amount: from.amount - amount });
+  patchAccount(toId,   { amount: to.amount + amount });
+  try {
+    const t = await api('/transfers', {
+      method: 'POST',
+      body: JSON.stringify({ fromAccountId: fromId, toAccountId: toId, amount, note }),
+    });
+    prependTransfer(t);
+  } catch (e) {
+    patchAccount(fromId, { amount: from.amount });   // rollback
+    patchAccount(toId,   { amount: to.amount });
+    toast(e.code === 'insufficient_funds' ? 'Not enough balance' : "Couldn't transfer");
+  }
+}
+```
+
+### Rendering
+
+- **Activity feed:** merge `transfers` into the transaction list client-side
+  (both carry `date` + `kind`); a transfer row is neutral (no +/− colour),
+  shows `name` ("NayaPay → SadaPay") and `− / +` nothing, just the amount.
+- **Account detail:** `GET /transfers?accountId=<id>` alongside that account's
+  transactions; show `− amount` when `fromAccountId === id`, `+ amount` when
+  `toAccountId === id`.
+- Deleting a transfer (long-press → delete) calls `DELETE /transfers/:id` and
+  refetches `/accounts`.
+
+### Prompt for the app (paste to whoever builds the UI)
+
+> Add an **account-to-account transfer** flow to the Khata+ app. The backend
+> endpoint already exists:
+> `POST {API_BASE}/transfers` with `{ fromAccountId, toAccountId, amount, date?, note? }`,
+> returns a `Transfer` `{ id, kind:'transfer', from, to, name, amount, note, date, dateLabel, time }`.
+> `GET {API_BASE}/transfers?accountId=` lists them; `DELETE {API_BASE}/transfers/:id` reverses it.
+> 400 codes: `same_account`, `invalid_account`, `insufficient_funds`.
+>
+> UI, matching the app's existing Modernist visual language and bottom-sheet
+> pattern (reuse the Add-expense sheet's structure, keypad, and Save button):
+> 1. Entry points: a "Transfer" action on the **Accounts** screen header and on
+>    each **Account detail** screen (pre-fills that account as "From").
+> 2. Transfer sheet: **From** account picker, **To** account picker (both list
+>    `useApp().accounts`, exclude the other selection), amount via the shared
+>    keypad, optional note field, Save.
+> 3. Validation before enabling Save: from ≠ to, amount > 0, amount ≤ from
+>    balance (show "Not enough in <account>" inline).
+> 4. On Save: call the store's `transfer()` action (optimistic — see store
+>    snippet), close the sheet, toast "Moved Rs … · <from> → <to>", both account
+>    balances update immediately on the Accounts screen.
+> 5. Show transfers in the **Activity** list as a neutral row
+>    ("NayaPay → SadaPay", amount, no red/green) by merging `useApp().transfers`
+>    into the feed by date. On **Account detail**, show `−`/`+` depending on
+>    direction.
+> 6. Long-press a transfer row → "Delete transfer" confirm → `DELETE` + refetch
+>    accounts.
+> 7. Empty state on a transfers-only view: reuse `EmptyState` copy
+>    ("No transfers yet").
+> Do not create matching income/expense rows — a transfer is its own `kind`.
+
+---
+
+## 13. Per-screen done-check
 
 - [ ] Splash → (token? Tabs : Welcome)
 - [ ] Signup → Otp → Tabs; Login → Tabs; Forgot → 204 message; Google → Tabs
@@ -294,5 +394,7 @@ to late beta. Send it to `/ai/ask` as `locale` so answers match.
 - [ ] Bills/Accounts/Analytics/Notifications: real data + empty states
 - [ ] AI: suggested + ask + follow-ups render `{lead,rows,tail,action}`
 - [ ] Settings: appearance persists; language patches `/me`; logout → Splash
+- [ ] Transfer sheet: From/To/amount, optimistic balance move, neutral Activity
+      row, delete reverses both balances
 - [ ] No `services/seed` import anywhere; app runs on a fresh account (auto-seeded
       demo dataset) and on a truly empty account (all empty states)

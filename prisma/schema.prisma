@@ -38,6 +38,7 @@ model User {
   subscriptions  Subscription[]
   notifications  Notification[]
   refreshTokens  RefreshToken[]
+  transfers      Transfer[]
   billSettings   BillSettings?
   notifPrefs     NotificationPreference?
 }
@@ -84,8 +85,28 @@ model Account {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   transactions Transaction[]
+  transfersOut Transfer[] @relation("TransferFrom")
+  transfersIn  Transfer[] @relation("TransferTo")
 
   @@index([userId])
+}
+
+model Transfer {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @db.ObjectId
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAccountId String   @db.ObjectId
+  fromAccount   Account  @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId   String   @db.ObjectId
+  toAccount     Account  @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount        Int
+  note          String?
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([fromAccountId])
+  @@index([toAccountId])
 }
 
 model Udhaar {

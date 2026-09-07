@@ -11,6 +11,7 @@ import meRoutes from './routes/me';
 import txRoutes from './routes/transactions';
 import udhaarRoutes from './routes/udhaar';
 import groupRoutes from './routes/groups';
+import transferRoutes from './routes/transfers';
 import goalsRoutes from './routes/goals';
 import moneyRoutes from './routes/money';
 import aiRoutes from './routes/ai';
@@ -44,6 +45,7 @@ export function createApp() {
   v1.use('/transactions', requireAuth, txRoutes);
   v1.use('/udhaar', requireAuth, udhaarRoutes);
   v1.use('/groups', requireAuth, groupRoutes);
+  v1.use('/transfers', requireAuth, transferRoutes);
   v1.use('/', requireAuth, goalsRoutes); // /goals, /budgets
   v1.use('/', requireAuth, moneyRoutes); // /bills, /subscriptions, /accounts, /networth, /analytics, /notifications, /export
   v1.use('/ai', requireAuth, aiRoutes);

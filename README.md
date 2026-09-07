@@ -79,6 +79,10 @@ Implemented, section by section:
   `/subscriptions`, `/accounts` (+`PATCH`), `/networth`, `/analytics?range=`,
   `/notifications` (+`/read`, `PATCH /notifications/preferences`), `POST /export`
   (returns `{url}` — file rendering is stubbed).
+- **Transfers** (not in `BACKEND.md`) — `POST /transfers`,
+  `GET /transfers?accountId=`, `GET/DELETE /transfers/:id`. Moves money between
+  the user's accounts atomically; recorded as `kind:"transfer"` so it never
+  affects income/expense aggregates. See `MOBILE_INTEGRATION.md` §12.
 - **AI assistant** — `POST /ai/ask` and `GET /ai/suggested-questions`, returning
   the `{lead, rows, tail, action, followups}` render shape. Two providers via
   `AI_PROVIDER`:
