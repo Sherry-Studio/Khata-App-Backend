@@ -95,17 +95,24 @@ router.get(
   }),
 );
 
-const createBody = z.object({
-  kind: z.enum(['expense', 'income']),
-  amount: z.number().int().positive(),
-  category: z.string().min(1),
-  method: z.string().min(1),
-  accountId: z.string().optional(),
-  date: z.string().optional(),
-  name: z.string().optional(),
-  note: z.string().optional(),
-  people: z.array(z.string()).optional(),
-});
+const createBody = z
+  .object({
+    kind: z.enum(['expense', 'income']),
+    amount: z.number().int().positive(),
+    category: z.string().min(1).optional(),
+    source: z.string().min(1).optional(), // income alias for category
+    method: z.string().min(1).optional(),
+    accountId: z.string().optional(),
+    date: z.string().optional(),
+    name: z.string().optional(),
+    note: z.string().optional(),
+    people: z.array(z.string()).optional(),
+  })
+  .transform((b) => ({
+    ...b,
+    category: b.category ?? b.source ?? (b.kind === 'income' ? 'Income' : 'Other'),
+    method: b.method ?? (b.kind === 'income' ? 'Bank' : 'Cash'),
+  }));
 
 router.post(
   '/',
@@ -156,7 +163,20 @@ router.patch(
   asyncHandler(async (req, res) => {
     const existing = await prisma.transaction.findFirst({ where: { id: req.params.id, userId: req.userId } });
     if (!existing) throw new ApiError(404, 'not_found');
-    const b = createBody.partial().parse(req.body);
+    const b = z
+      .object({
+        kind: z.enum(['expense', 'income']),
+        amount: z.number().int().positive(),
+        category: z.string().min(1),
+        method: z.string().min(1),
+        accountId: z.string(),
+        date: z.string(),
+        name: z.string(),
+        note: z.string(),
+        people: z.array(z.string()),
+      })
+      .partial()
+      .parse(req.body);
     const t = await prisma.transaction.update({
       where: { id: existing.id },
       data: {

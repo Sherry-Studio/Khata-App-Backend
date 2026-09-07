@@ -4,6 +4,15 @@ REST API for the Khata+ mobile app, built to the contract in
 `../Khata Mobile App/BACKEND.md`. Node + Express + TypeScript + Prisma (MongoDB).
 Includes an **admin API** for user management, metrics, audit and broadcasts.
 
+### Docs
+
+| File | For |
+| --- | --- |
+| `README.md` | running / deploying this backend |
+| `MOBILE_INTEGRATION.md` | swapping the app's alpha in-memory store for this API |
+| `ADMIN_PANEL.md` | building the beta admin dashboard on `/admin/*` |
+| `../Khata Mobile App/BACKEND.md` | the original endpoint contract |
+
 ## Quick start
 
 ```bash
