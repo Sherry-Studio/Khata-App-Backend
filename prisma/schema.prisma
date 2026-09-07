@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String?
+  name           String   @default("")
+  phone          String   @default("")
+  monthlyIncome  Int      @default(0)
+  language       String   @default("en") // en | ur | ur-roman
+  appearance     String   @default("system") // system | light | dark
+  role           String   @default("user") // user | admin
+  verified       Boolean  @default(false)
+  disabled       Boolean  @default(false)
+  otpCode        String?
+  otpExpiresAt   DateTime?
+  otpAttempts    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  transactions   Transaction[]
+  accounts       Account[]
+  udhaar         Udhaar[]
+  groups         Group[]
+  goals          Goal[]
+  budgets        Budget[]
+  bills          Bill[]
+  subscriptions  Subscription[]
+  notifications  Notification[]
+  refreshTokens  RefreshToken[]
+  billSettings   BillSettings?
+  notifPrefs     NotificationPreference?
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   // expense | income
+  name      String
+  amount    Int
+  category  String
+  method    String
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+  date      DateTime
+  note      String?
+  people    String   @default("[]") // JSON string[]
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model Account {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag     String
+  name    String
+  type    String @default("bank") // bank | wallet | manual
+  balance Int    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  transactions Transaction[]
+}
+
+model Udhaar {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String   @default("")
+  direction String   // owe (they owe me) | iowe
+  amount    Int      @default(0)
+  reason    String   @default("")
+  since     DateTime @default(now())
+  dueDate   DateTime?
+  settled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  entries   UdhaarEntry[]
+
+  @@index([userId])
+}
+
+model UdhaarEntry {
+  id       String   @id @default(cuid())
+  udhaarId String
+  udhaar   Udhaar   @relation(fields: [udhaarId], references: [id], onDelete: Cascade)
+  type     String   // lent | borrowed | repayment
+  amount   Int
+  method   String   @default("Cash")
+  date     DateTime @default(now())
+}
+
+model Group {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  splitType String   @default("equal")
+  createdAt DateTime @default(now())
+  members   GroupMember[]
+  expenses  GroupExpense[]
+  settlements Settlement[]
+}
+
+model GroupMember {
+  id      String @id @default(cuid())
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name    String
+}
+
+model GroupExpense {
+  id      String   @id @default(cuid())
+  groupId String
+  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  label   String
+  amount  Int
+  paidBy  String
+  date    DateTime @default(now())
+}
+
+model Settlement {
+  id      String  @id @default(cuid())
+  groupId String
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromName String
+  toName   String
+  amount   Int
+  settled  Boolean @default(false)
+}
+
+model Goal {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+  icon   String   @default("shield")
+  saved  Int      @default(0)
+  target Int
+  date   String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model Budget {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label  String
+  spent  Int    @default(0)
+  total  Int
+  month  String // YYYY-MM
+  createdAt DateTime @default(now())
+
+  @@index([userId, month])
+}
+
+model Bill {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name    String
+  amount  Int
+  icon    String   @default("card")
+  dueDate DateTime?
+  paidAt  DateTime?
+  repeat  String   @default("monthly")
+  createdAt DateTime @default(now())
+}
+
+model BillSettings {
+  userId       String @id
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remindOffset Int    @default(3)
+  repeat       String @default("monthly")
+}
+
+model Subscription {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+  amount Int
+  nextAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind   String
+  body   String
+  tone   String   @default("accent") // warn | accent | pos
+  read   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model NotificationPreference {
+  userId   String @id
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prefs    String @default("{}") // JSON toggles
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actorEmail String
+  action    String
+  targetId  String?
+  meta      String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

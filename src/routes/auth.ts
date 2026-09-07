@@ -1,0 +1,201 @@
+import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+import { prisma } from '../db';
+import { env } from '../env';
+import { ApiError, asyncHandler } from '../http';
+import { issueSession, revokeRefreshToken, rotateRefreshToken } from '../auth/tokens';
+import { publicUser } from '../serializers';
+import { seedUserData } from '../seedUserData';
+
+const router = Router();
+
+function makeOtp(): { code: string; expiresAt: Date } {
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  return { code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
+}
+
+function sendOtp(email: string, code: string) {
+  // Wire a real SMS/email provider here. Dev mode just logs.
+  console.log(`[OTP] ${email} -> ${code}`);
+}
+
+router.post(
+  '/signup',
+  asyncHandler(async (req, res) => {
+    const { email, password } = z
+      .object({ email: z.string().email(), password: z.string().min(8) })
+      .parse(req.body);
+    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (existing) throw new ApiError(409, 'email_taken');
+    const otp = makeOtp();
+    const user = await prisma.user.create({
+      data: {
+        email: email.toLowerCase(),
+        passwordHash: await bcrypt.hash(password, 10),
+        otpCode: otp.code,
+        otpExpiresAt: otp.expiresAt,
+      },
+    });
+    sendOtp(user.email, otp.code);
+    res.status(201).json({ userId: user.id, otpRequired: true, ...(env.otpDevMode ? { devOtp: otp.code } : {}) });
+  }),
+);
+
+router.post(
+  '/login',
+  asyncHandler(async (req, res) => {
+    const { email, password } = z
+      .object({ email: z.string().email(), password: z.string() })
+      .parse(req.body);
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new ApiError(401, 'invalid_credentials');
+    }
+    if (user.disabled) throw new ApiError(403, 'account_disabled');
+    if (!user.verified) {
+      const otp = makeOtp();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { otpCode: otp.code, otpExpiresAt: otp.expiresAt, otpAttempts: 0 },
+      });
+      sendOtp(user.email, otp.code);
+      throw new ApiError(403, 'otp_required', { userId: user.id, ...(env.otpDevMode ? { devOtp: otp.code } : {}) });
+    }
+    const session = await issueSession(user.id);
+    res.json({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: publicUser(session.user),
+    });
+  }),
+);
+
+router.post(
+  '/otp/verify',
+  asyncHandler(async (req, res) => {
+    const { userId, code } = z.object({ userId: z.string(), code: z.string() }).parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new ApiError(404, 'user_not_found');
+    const maxAttempts = 5;
+    if (
+      !user.otpCode ||
+      !user.otpExpiresAt ||
+      user.otpExpiresAt < new Date() ||
+      user.otpCode !== code
+    ) {
+      const attempts = user.otpAttempts + 1;
+      await prisma.user.update({ where: { id: user.id }, data: { otpAttempts: attempts } });
+      throw new ApiError(400, 'invalid_otp', { attemptsLeft: Math.max(0, maxAttempts - attempts) });
+    }
+    const firstVerify = !user.verified;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { verified: true, otpCode: null, otpExpiresAt: null, otpAttempts: 0 },
+    });
+    if (firstVerify) await seedUserData(user.id);
+    const session = await issueSession(user.id);
+    res.json({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: publicUser(session.user),
+    });
+  }),
+);
+
+router.post(
+  '/otp/resend',
+  asyncHandler(async (req, res) => {
+    const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new ApiError(404, 'user_not_found');
+    const otp = makeOtp();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { otpCode: otp.code, otpExpiresAt: otp.expiresAt, otpAttempts: 0 },
+    });
+    sendOtp(user.email, otp.code);
+    res.status(env.otpDevMode ? 200 : 204).json(env.otpDevMode ? { devOtp: otp.code } : undefined);
+  }),
+);
+
+router.post(
+  '/password/reset',
+  asyncHandler(async (req, res) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    // Always 204 — do not leak which emails exist.
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (user) {
+      const otp = makeOtp();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { otpCode: otp.code, otpExpiresAt: otp.expiresAt },
+      });
+      console.log(`[RESET] ${email} -> ${otp.code}`);
+    }
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  '/refresh',
+  asyncHandler(async (req, res) => {
+    const { refreshToken } = z.object({ refreshToken: z.string() }).parse(req.body);
+    const rotated = await rotateRefreshToken(refreshToken);
+    if (!rotated) throw new ApiError(401, 'invalid_refresh_token');
+    res.json({ accessToken: rotated.accessToken, refreshToken: rotated.refreshToken });
+  }),
+);
+
+router.post(
+  '/logout',
+  asyncHandler(async (req, res) => {
+    const { refreshToken } = z.object({ refreshToken: z.string() }).parse(req.body);
+    await revokeRefreshToken(refreshToken);
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  '/oauth/google',
+  asyncHandler(async (req, res) => {
+    const { idToken } = z.object({ idToken: z.string() }).parse(req.body);
+    // Verify with Google in production. Dev mode: accept a JSON base64 payload {email,name}.
+    let email: string;
+    let name = '';
+    if (env.googleClientId) {
+      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      if (!r.ok) throw new ApiError(401, 'invalid_id_token');
+      const info = (await r.json()) as { aud: string; email: string; name?: string };
+      if (info.aud !== env.googleClientId) throw new ApiError(401, 'wrong_audience');
+      email = info.email;
+      name = info.name ?? '';
+    } else {
+      try {
+        const decoded = JSON.parse(Buffer.from(idToken.split('.')[1] ?? idToken, 'base64').toString());
+        email = String(decoded.email);
+        name = String(decoded.name ?? '');
+      } catch {
+        throw new ApiError(401, 'invalid_id_token');
+      }
+    }
+    let user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    let fresh = false;
+    if (!user) {
+      user = await prisma.user.create({
+        data: { email: email.toLowerCase(), name, verified: true },
+      });
+      fresh = true;
+    }
+    if (user.disabled) throw new ApiError(403, 'account_disabled');
+    if (fresh) await seedUserData(user.id);
+    const session = await issueSession(user.id);
+    res.json({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: publicUser(session.user),
+    });
+  }),
+);
+
+export default router;
