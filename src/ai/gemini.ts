@@ -5,8 +5,10 @@ import type { AiAnswer } from './types';
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const SYSTEM = `You are the money assistant inside "Khata+", a personal finance app for Pakistan.
-Answer ONLY from the JSON figures provided in the user message. Never invent numbers.
-All amounts are integer PKR. Be concise and practical.
+Answer ONLY from the JSON figures provided in the user message. Never invent numbers
+and do not do arithmetic beyond what the figures already state.
+All amounts are integer PKR (Pakistani rupees) — write them as "Rs 27,190", never "$".
+Be concise and practical.
 Do NOT give specific investment, stock, or crypto advice — suggest budgeting/saving habits instead.
 Reply in the user's locale when given (en = English, ur = Urdu, ur-roman = Roman Urdu).
 Return ONLY the structured object:
@@ -16,6 +18,9 @@ Return ONLY the structured object:
 - action: one concrete suggested next step.
 - followups: 2-3 short follow-up questions the user might ask next.`;
 
+// Gemini's responseSchema is proto-based: `items` must be a single schema
+// (no JSON-Schema tuples), so rows come back as {label, amount} objects and
+// are converted to [label, amount] pairs after parsing.
 const responseSchema = {
   type: 'object',
   properties: {
@@ -23,10 +28,9 @@ const responseSchema = {
     rows: {
       type: 'array',
       items: {
-        type: 'array',
-        items: [{ type: 'string' }, { type: 'number' }],
-        minItems: 2,
-        maxItems: 2,
+        type: 'object',
+        properties: { label: { type: 'string' }, amount: { type: 'number' } },
+        required: ['label', 'amount'],
       },
     },
     tail: { type: 'string' },
@@ -63,7 +67,7 @@ export async function answerWithGemini(
   };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), 20_000);
   let res: Response;
   try {
     res = await fetch(`${ENDPOINT}/${env.geminiModel}:generateContent?key=${env.geminiApiKey}`, {
@@ -86,12 +90,23 @@ export async function answerWithGemini(
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('gemini_empty_response');
 
-  const parsed = JSON.parse(text) as AiAnswer;
+  const parsed = JSON.parse(text) as {
+    lead?: string;
+    rows?: ({ label?: string; amount?: number } | [string, number])[];
+    tail?: string;
+    action?: string;
+    followups?: string[];
+  };
+  const rows = (parsed.rows ?? [])
+    .map((r) =>
+      Array.isArray(r)
+        ? ([String(r[0]), Math.round(Number(r[1]) || 0)] as [string, number])
+        : ([String(r.label ?? ''), Math.round(Number(r.amount) || 0)] as [string, number]),
+    )
+    .filter((r) => r[0] !== '');
   return {
     lead: String(parsed.lead ?? ''),
-    rows: (parsed.rows ?? [])
-      .filter((r) => Array.isArray(r) && r.length === 2)
-      .map((r) => [String(r[0]), Math.round(Number(r[1]) || 0)] as [string, number]),
+    rows,
     tail: String(parsed.tail ?? ''),
     action: String(parsed.action ?? ''),
     followups: (parsed.followups ?? []).map(String).slice(0, 3),

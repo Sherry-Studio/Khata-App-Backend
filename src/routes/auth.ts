@@ -7,6 +7,7 @@ import { ApiError, asyncHandler } from '../http';
 import { issueSession, revokeRefreshToken, rotateRefreshToken } from '../auth/tokens';
 import { publicUser } from '../serializers';
 import { seedUserData } from '../seedUserData';
+import { sendOtpEmail } from '../mailer';
 
 const router = Router();
 
@@ -15,9 +16,11 @@ function makeOtp(): { code: string; expiresAt: Date } {
   return { code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
 }
 
-function sendOtp(email: string, code: string) {
-  // Wire a real SMS/email provider here. Dev mode just logs.
+function sendOtp(email: string, code: string, purpose: 'verify' | 'reset' = 'verify') {
   console.log(`[OTP] ${email} -> ${code}`);
+  void sendOtpEmail(email, code, purpose).catch((e) =>
+    console.error('[MAIL:error]', (e as Error).message),
+  );
 }
 
 router.post(
@@ -131,7 +134,7 @@ router.post(
         where: { id: user.id },
         data: { otpCode: otp.code, otpExpiresAt: otp.expiresAt },
       });
-      console.log(`[RESET] ${email} -> ${otp.code}`);
+      sendOtp(user.email, otp.code, 'reset');
     }
     res.status(204).end();
   }),

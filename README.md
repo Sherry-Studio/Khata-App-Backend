@@ -1,17 +1,20 @@
 # Khata+ backend
 
 REST API for the Khata+ mobile app, built to the contract in
-`../Khata Mobile App/BACKEND.md`. Node + Express + TypeScript + Prisma (SQLite).
+`../Khata Mobile App/BACKEND.md`. Node + Express + TypeScript + Prisma (MongoDB).
 Includes an **admin API** for user management, metrics, audit and broadcasts.
 
 ## Quick start
 
 ```bash
-cp .env.example .env
+cp .env.example .env      # then set DATABASE_URL (MongoDB), GEMINI_API_KEY, SMTP_*
 npm install
-npm run setup   # prisma db push + seed (admin + demo user with full dataset)
-npm run dev     # http://localhost:4000/api/v1
+npm run setup             # prisma db push + seed (admin + demo user with full dataset)
+npm run dev               # http://localhost:4000/api/v1
 ```
+
+Requires a MongoDB replica set — MongoDB Atlas (any free M0 cluster) works out of
+the box; a bare local `mongod` does not (Prisma needs transactions).
 
 Seeded accounts:
 
@@ -29,8 +32,8 @@ Change these via `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`.
 | `npm run dev`       | Watch-mode server                               |
 | `npm run build`     | `prisma generate` + `tsc` → `dist/`             |
 | `npm start`         | Run compiled server                            |
-| `npm run db:push`   | Sync schema to SQLite                           |
-| `npm run db:reset`  | Drop + recreate                                |
+| `npm run db:push`   | Sync indexes to MongoDB                         |
+| `npm run db:reset`  | Force-resync (`prisma db push --force-reset`)   |
 | `npm run seed`      | Seed admin + demo user                          |
 | `npm run typecheck` | `tsc --noEmit`                                  |
 
@@ -47,9 +50,11 @@ Implemented, section by section:
 
 - **Auth** — `signup`, `login`, `otp/verify` (returns `attemptsLeft` in the 400
   body for the OTP error view), `otp/resend`, `password/reset`, `refresh`
-  (rotating refresh tokens), `logout`, `oauth/google`. In dev (`OTP_DEV_MODE=true`)
-  the OTP is returned as `devOtp` and logged; wire a real SMS/email provider in
-  `sendOtp()` in `src/routes/auth.ts`.
+  (rotating refresh tokens), `logout`, `oauth/google`.
+  - `OTP_DEV_MODE=true` → the code is returned as `devOtp` in the response + logged.
+  - `OTP_DEV_MODE=false` → the code is emailed (SMTP, `src/mailer.ts`) and never
+    returned. If SMTP is unset or fails, the code is still logged so dev isn't
+    blocked.
 - **Profile & setup** — `GET/PATCH /me`.
 - **Transactions** — list (cursor pagination + all filter params + `q` search),
   `:id`, create (updates account balance + matching budget `spent`), patch,
@@ -70,10 +75,11 @@ Implemented, section by section:
   `AI_PROVIDER`:
   - `rules` (default) — offline, deterministic answers from the user's own data.
     Free, no key, no data leaves the server.
-  - `gemini` — Google Gemini Flash (free tier key at
-    <https://aistudio.google.com/apikey>). Only an **aggregated** snapshot
+  - `gemini` — Google Gemini (free tier key at
+    <https://aistudio.google.com/apikey>), model `GEMINI_MODEL`
+    (default `gemini-flash-lite-latest`). Only an **aggregated** snapshot
     (`src/ai/context.ts`) is sent — never raw transactions, names, or phones.
-    Any error (missing key, timeout, bad JSON, rate limit) falls back to `rules`.
+    Any error (missing key, 20s timeout, bad JSON, rate limit) falls back to `rules`.
   Per-user rate limit: `AI_RATE_PER_MIN` (default 10/min). The response includes
   `provider` so you can see which answered. Keep the disclaimer line client-side.
 
@@ -109,13 +115,12 @@ app's demo dataset via `src/seedUserData.ts` so the dashboard is never empty.
 | GET | `/admin/audit?cursor&limit` | audit log of admin actions |
 | POST | `/admin/notifications/broadcast` | push a notification to all users or one (`{kind,body,tone,userId?}`) |
 
-Every mutating admin action is written to the `AuditLog` table. An admin cannot
-disable or delete their own account.
+Every mutating admin action is written to the `AuditLog` collection. An admin
+cannot disable or delete their own account.
 
 ## Production notes
 
-- Swap SQLite for Postgres: change `datasource db` provider + `DATABASE_URL`,
-  then `prisma migrate`.
 - Set strong `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`, `NODE_ENV=production`.
 - Set `GOOGLE_CLIENT_ID` to enable real Google ID-token verification.
-- Implement `sendOtp()` and the `/export` file renderer.
+- OTP email goes through `src/mailer.ts` (SMTP). The `/export` file renderer is
+  still a stub (returns a `{url}` only).

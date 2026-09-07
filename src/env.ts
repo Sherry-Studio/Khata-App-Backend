@@ -20,9 +20,16 @@ export const env = {
   otpDevMode: (process.env.OTP_DEV_MODE ?? 'true') === 'true',
   isProd: process.env.NODE_ENV === 'production',
 
+  // SMTP for OTP / reset emails (Gmail app password). If unset, codes are logged only.
+  smtpHost: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+  smtpPort: parseInt(process.env.SMTP_PORT ?? '465', 10),
+  smtpUser: process.env.SMTP_USER ?? '',
+  smtpPass: process.env.SMTP_PASS ?? '',
+  mailFrom: process.env.MAIL_FROM ?? process.env.SMTP_USER ?? 'no-reply@khata.app',
+
   // AI assistant. provider: rules | gemini. gemini falls back to rules on any error.
   aiProvider: (process.env.AI_PROVIDER ?? 'rules') as 'rules' | 'gemini',
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
-  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-flash-lite-latest',
   aiRatePerMin: parseInt(process.env.AI_RATE_PER_MIN ?? '10', 10),
 };

@@ -3,27 +3,27 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  email          String    @unique
   passwordHash   String?
-  name           String   @default("")
-  phone          String   @default("")
-  monthlyIncome  Int      @default(0)
-  language       String   @default("en") // en | ur | ur-roman
-  appearance     String   @default("system") // system | light | dark
-  role           String   @default("user") // user | admin
-  verified       Boolean  @default(false)
-  disabled       Boolean  @default(false)
+  name           String    @default("")
+  phone          String    @default("")
+  monthlyIncome  Int       @default(0)
+  language       String    @default("en") // en | ur | ur-roman
+  appearance     String    @default("system") // system | light | dark
+  role           String    @default("user") // user | admin
+  verified       Boolean   @default(false)
+  disabled       Boolean   @default(false)
   otpCode        String?
   otpExpiresAt   DateTime?
-  otpAttempts    Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  otpAttempts    Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   transactions   Transaction[]
   accounts       Account[]
@@ -40,25 +40,27 @@ model User {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   token     String   @unique
-  userId    String
+  userId    String   @db.ObjectId
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   revoked   Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Transaction {
-  id        String   @id @default(cuid())
-  userId    String
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   kind      String   // expense | income
   name      String
   amount    Int
   category  String
   method    String
-  accountId String?
+  accountId String?  @db.ObjectId
   account   Account? @relation(fields: [accountId], references: [id])
   date      DateTime
   note      String?
@@ -69,165 +71,187 @@ model Transaction {
 }
 
 model Account {
-  id      String @id @default(cuid())
-  userId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tag     String
-  name    String
-  type    String @default("bank") // bank | wallet | manual
-  balance Int    @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag          String
+  name         String
+  type         String   @default("bank") // bank | wallet | manual
+  balance      Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   transactions Transaction[]
+
+  @@index([userId])
 }
 
 model Udhaar {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
-  phone     String   @default("")
-  direction String   // owe (they owe me) | iowe
-  amount    Int      @default(0)
-  reason    String   @default("")
-  since     DateTime @default(now())
+  phone     String    @default("")
+  direction String    // owe (they owe me) | iowe
+  amount    Int       @default(0)
+  reason    String    @default("")
+  since     DateTime  @default(now())
   dueDate   DateTime?
-  settled   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  settled   Boolean   @default(false)
+  createdAt DateTime  @default(now())
   entries   UdhaarEntry[]
 
   @@index([userId])
 }
 
 model UdhaarEntry {
-  id       String   @id @default(cuid())
-  udhaarId String
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  udhaarId String   @db.ObjectId
   udhaar   Udhaar   @relation(fields: [udhaarId], references: [id], onDelete: Cascade)
   type     String   // lent | borrowed | repayment
   amount   Int
   method   String   @default("Cash")
   date     DateTime @default(now())
+
+  @@index([udhaarId])
 }
 
 model Group {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  splitType String   @default("equal")
-  createdAt DateTime @default(now())
-  members   GroupMember[]
-  expenses  GroupExpense[]
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  splitType   String   @default("equal")
+  createdAt   DateTime @default(now())
+  members     GroupMember[]
+  expenses    GroupExpense[]
   settlements Settlement[]
+
+  @@index([userId])
 }
 
 model GroupMember {
-  id      String @id @default(cuid())
-  groupId String
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  groupId String @db.ObjectId
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   name    String
+
+  @@index([groupId])
 }
 
 model GroupExpense {
-  id      String   @id @default(cuid())
-  groupId String
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  groupId String   @db.ObjectId
   group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   label   String
   amount  Int
   paidBy  String
   date    DateTime @default(now())
+
+  @@index([groupId])
 }
 
 model Settlement {
-  id      String  @id @default(cuid())
-  groupId String
-  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  id       String  @id @default(auto()) @map("_id") @db.ObjectId
+  groupId  String  @db.ObjectId
+  group    Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
   fromName String
   toName   String
   amount   Int
   settled  Boolean @default(false)
+
+  @@index([groupId])
 }
 
 model Goal {
-  id     String   @id @default(cuid())
-  userId String
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name   String
-  icon   String   @default("shield")
-  saved  Int      @default(0)
-  target Int
-  date   String   @default("")
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String   @default("shield")
+  saved     Int      @default(0)
+  target    Int
+  date      String   @default("")
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Budget {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label  String
-  spent  Int    @default(0)
-  total  Int
-  month  String // YYYY-MM
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String
+  spent     Int      @default(0)
+  total     Int
+  month     String // YYYY-MM
   createdAt DateTime @default(now())
 
   @@index([userId, month])
 }
 
 model Bill {
-  id      String   @id @default(cuid())
-  userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name    String
-  amount  Int
-  icon    String   @default("card")
-  dueDate DateTime?
-  paidAt  DateTime?
-  repeat  String   @default("monthly")
-  createdAt DateTime @default(now())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  amount    Int
+  icon      String    @default("card")
+  dueDate   DateTime?
+  paidAt    DateTime?
+  repeat    String    @default("monthly")
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model BillSettings {
-  userId       String @id
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String @unique @db.ObjectId
   user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   remindOffset Int    @default(3)
   repeat       String @default("monthly")
 }
 
 model Subscription {
-  id     String   @id @default(cuid())
-  userId String
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name   String
-  amount Int
-  nextAt DateTime
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  amount    Int
+  nextAt    DateTime
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Notification {
-  id     String   @id @default(cuid())
-  userId String
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind   String
-  body   String
-  tone   String   @default("accent") // warn | accent | pos
-  read   Boolean  @default(false)
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  body      String
+  tone      String   @default("accent") // warn | accent | pos
+  read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model NotificationPreference {
-  userId   String @id
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prefs    String @default("{}") // JSON toggles
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prefs  String @default("{}") // JSON toggles
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  actorId   String
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  actorId    String
   actorEmail String
-  action    String
-  targetId  String?
-  meta      String   @default("{}")
-  createdAt DateTime @default(now())
+  action     String
+  targetId   String?
+  meta       String   @default("{}")
+  createdAt  DateTime @default(now())
 
   @@index([createdAt])
 }
