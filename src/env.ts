@@ -18,7 +18,6 @@ export const env = {
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@khata.app',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin12345',
   otpDevMode: (process.env.OTP_DEV_MODE ?? 'true') === 'true',
-  otpStatic: (process.env.OTP_STATIC ?? '').trim(),
   isProd: process.env.NODE_ENV === 'production',
 
   // SMTP for OTP / reset emails (Gmail app password). If unset, codes are logged only.

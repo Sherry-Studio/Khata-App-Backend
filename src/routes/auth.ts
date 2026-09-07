@@ -11,10 +11,12 @@ import { sendOtpEmail } from '../mailer';
 
 const router = Router();
 
+// TEMP (beta): every OTP is this fixed code while real email delivery is not
+// wired up. Set to '' to restore random 6-digit codes.
+const STATIC_OTP: string = '123456';
+
 function makeOtp(): { code: string; expiresAt: Date } {
-  // OTP_STATIC (e.g. "123456") makes every code fixed — beta/testing only,
-  // while real email delivery is not wired up.
-  const code = env.otpStatic || String(Math.floor(100000 + Math.random() * 900000));
+  const code = STATIC_OTP || String(Math.floor(100000 + Math.random() * 900000));
   return { code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
 }
 
@@ -83,7 +85,7 @@ router.post(
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new ApiError(404, 'user_not_found');
     const maxAttempts = 5;
-    const staticOk = env.otpStatic !== '' && code === env.otpStatic;
+    const staticOk = STATIC_OTP.length > 0 && code === STATIC_OTP;
     if (
       !staticOk &&
       (!user.otpCode ||
