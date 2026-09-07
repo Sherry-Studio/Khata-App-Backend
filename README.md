@@ -118,9 +118,36 @@ app's demo dataset via `src/seedUserData.ts` so the dashboard is never empty.
 Every mutating admin action is written to the `AuditLog` collection. An admin
 cannot disable or delete their own account.
 
+## Deploy to Vercel
+
+The app is a normal long-running server locally (`src/server.ts` → `app.listen`).
+On Vercel that file is **not** used — Vercel is serverless, so `api/index.ts`
+wraps the same Express app (`createApp()`) as a function and `vercel.json`
+rewrites every path to it.
+
+1. **Env vars — Vercel never reads a repo `.env` file** (dotenv only loads it in
+   local dev; `.env*` is git-ignored anyway). Load them into the project:
+   - Dashboard → Settings → Environment Variables → **Import .env** → paste
+     `.env.vercel`, or
+   - `vercel env add <KEY> production` per key.
+   Do **not** set `NODE_ENV` (Vercel sets it). Redeploy after changing vars.
+2. **MongoDB Atlas** → Network Access → allow `0.0.0.0/0` (Vercel egress IPs are
+   dynamic).
+3. `prisma generate` runs via `postinstall` + `vercel-build`; the rhel binary
+   target is in `schema.prisma`. Schema/seed are run once from your machine
+   (`npm run setup`), never on Vercel.
+4. Deploy: `vercel --prod` (or connect the repo). Base URL becomes
+   `https://<project>.vercel.app/api/v1`.
+
+Caveats: the AI rate-limit is per-instance in memory (fine, just approximate);
+serverless cold starts add ~1s; keep `maxDuration` ≥ the Gemini timeout (set to
+30s in `vercel.json`). A persistent host (Render / Railway / Fly) can instead run
+`npm run build && npm start` unchanged.
+
 ## Production notes
 
-- Set strong `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`, `NODE_ENV=production`.
+- Set strong `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` (the ones in `.env.vercel`
+  are freshly generated — rotate anything shared over chat).
 - Set `GOOGLE_CLIENT_ID` to enable real Google ID-token verification.
 - OTP email goes through `src/mailer.ts` (SMTP). The `/export` file renderer is
   still a stub (returns a `{url}` only).
