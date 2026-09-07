@@ -1,0 +1,6 @@
+# src/server.ts calls app.listen() — it must never run as a serverless function.
+# src/seed.ts is a one-off CLI script. Neither is imported by the app.
+src/server.ts
+src/seed.ts
+__tests__
+dist

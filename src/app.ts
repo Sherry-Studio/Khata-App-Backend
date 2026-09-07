@@ -43,3 +43,9 @@ export function createApp() {
   app.use(errorHandler);
   return app;
 }
+
+// A ready Express instance. Valid as a Vercel serverless default export
+// (Vercel treats an Express app as the request handler) and as a plain
+// Node request listener for any other host. src/server.ts adds app.listen().
+const app = createApp();
+export default app;
