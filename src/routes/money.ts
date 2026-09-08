@@ -8,6 +8,7 @@ import {
   serializeNotification,
   serializeSubscription,
 } from '../serializers';
+import { wealthTotals } from '../util/aggregates';
 const router = Router();
 
 /* ---------- Bills ---------- */
@@ -39,6 +40,37 @@ router.post(
     if (!bill) throw new ApiError(404, 'not_found');
     const updated = await prisma.bill.update({ where: { id: bill.id }, data: { paidAt: new Date() } });
     res.json(serializeBill(updated));
+  }),
+);
+
+router.patch(
+  '/bills/:id',
+  asyncHandler(async (req, res) => {
+    const bill = await prisma.bill.findFirst({ where: { id: req.params.id, userId: req.userId } });
+    if (!bill) throw new ApiError(404, 'not_found');
+    const b = z
+      .object({
+        name: z.string().min(1).optional(),
+        amount: z.number().int().positive().optional(),
+        dueDate: z.string().optional(),
+        icon: z.string().optional(),
+      })
+      .parse(req.body);
+    const updated = await prisma.bill.update({
+      where: { id: bill.id },
+      data: { ...b, dueDate: b.dueDate ? new Date(b.dueDate) : undefined },
+    });
+    res.json(serializeBill(updated));
+  }),
+);
+
+router.delete(
+  '/bills/:id',
+  asyncHandler(async (req, res) => {
+    const bill = await prisma.bill.findFirst({ where: { id: req.params.id, userId: req.userId } });
+    if (!bill) throw new ApiError(404, 'not_found');
+    await prisma.bill.delete({ where: { id: bill.id } });
+    res.status(204).end();
   }),
 );
 
@@ -75,6 +107,36 @@ router.post(
   }),
 );
 
+router.patch(
+  '/subscriptions/:id',
+  asyncHandler(async (req, res) => {
+    const s = await prisma.subscription.findFirst({ where: { id: req.params.id, userId: req.userId } });
+    if (!s) throw new ApiError(404, 'not_found');
+    const b = z
+      .object({
+        name: z.string().min(1).optional(),
+        amount: z.number().int().positive().optional(),
+        nextAt: z.string().optional(),
+      })
+      .parse(req.body);
+    const updated = await prisma.subscription.update({
+      where: { id: s.id },
+      data: { ...b, nextAt: b.nextAt ? new Date(b.nextAt) : undefined },
+    });
+    res.json(serializeSubscription(updated));
+  }),
+);
+
+router.delete(
+  '/subscriptions/:id',
+  asyncHandler(async (req, res) => {
+    const s = await prisma.subscription.findFirst({ where: { id: req.params.id, userId: req.userId } });
+    if (!s) throw new ApiError(404, 'not_found');
+    await prisma.subscription.delete({ where: { id: s.id } });
+    res.status(204).end();
+  }),
+);
+
 /* ---------- Accounts ---------- */
 router.get(
   '/accounts',
@@ -106,25 +168,53 @@ router.patch(
   }),
 );
 
+router.delete(
+  '/accounts/:id',
+  asyncHandler(async (req, res) => {
+    const acc = await prisma.account.findFirst({ where: { id: req.params.id, userId: req.userId } });
+    if (!acc) throw new ApiError(404, 'not_found');
+    // keep the history — just detach the transactions from the deleted account
+    await prisma.transaction.updateMany({ where: { accountId: acc.id }, data: { accountId: null } });
+    await prisma.account.delete({ where: { id: acc.id } });
+    res.status(204).end();
+  }),
+);
+
 router.get(
   '/networth',
   asyncHandler(async (req, res) => {
-    const accounts = await prisma.account.findMany({ where: { userId: req.userId } });
-    const owedToMe = await prisma.udhaar.aggregate({
-      _sum: { amount: true },
-      where: { userId: req.userId, direction: 'owe', settled: false },
-    });
-    const iOwe = await prisma.udhaar.aggregate({
-      _sum: { amount: true },
-      where: { userId: req.userId, direction: 'iowe', settled: false },
-    });
-    const cash = accounts.reduce((s, a) => s + a.balance, 0);
+    const [accounts, assets, liabilities, w] = await Promise.all([
+      prisma.account.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.asset.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.liability.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'asc' } }),
+      wealthTotals(req.userId!),
+    ]);
     const lines = [
-      ...accounts.map((a) => ({ label: a.name, amount: a.balance, tone: 'pos' as const })),
-      { label: 'Owed to me', amount: owedToMe._sum.amount ?? 0, tone: 'pos' as const },
-      { label: 'I owe', amount: -(iOwe._sum.amount ?? 0), tone: 'neg' as const },
+      ...accounts.map((a) => ({ label: a.name, amount: a.balance, tone: 'pos' as const, group: 'liquid' as const })),
+      ...assets
+        .filter((a) => a.liquid)
+        .map((a) => ({ label: a.name, amount: a.value, tone: 'pos' as const, group: 'liquid' as const })),
+      ...assets
+        .filter((a) => !a.liquid)
+        .map((a) => ({ label: a.name, amount: a.value, tone: 'pos' as const, group: 'invested' as const })),
+      ...(w.receivables
+        ? [{ label: 'Owed to me', amount: w.receivables, tone: 'pos' as const, group: 'receivable' as const }]
+        : []),
+      ...liabilities.map((l) => ({ label: l.name, amount: -l.balance, tone: 'neg' as const, group: 'liability' as const })),
     ];
-    res.json({ estimate: cash + (owedToMe._sum.amount ?? 0) - (iOwe._sum.amount ?? 0), lines });
+    const iOwe = w.liabilities - liabilities.reduce((s, l) => s + l.balance, 0);
+    if (iOwe > 0) {
+      lines.push({ label: 'I owe (khata)', amount: -iOwe, tone: 'neg' as const, group: 'liability' as const });
+    }
+    res.json({
+      netWorth: w.netWorth,
+      estimate: w.netWorth, // back-compat with older app builds
+      liquid: w.liquid,
+      invested: w.invested,
+      receivables: w.receivables,
+      liabilities: w.liabilities,
+      lines,
+    });
   }),
 );
 

@@ -14,6 +14,7 @@ import groupRoutes from './routes/groups';
 import transferRoutes from './routes/transfers';
 import goalsRoutes from './routes/goals';
 import moneyRoutes from './routes/money';
+import wealthRoutes from './routes/wealth';
 import aiRoutes from './routes/ai';
 import adminRoutes from './routes/admin';
 
@@ -48,6 +49,7 @@ export function createApp() {
   v1.use('/transfers', requireAuth, transferRoutes);
   v1.use('/', requireAuth, goalsRoutes); // /goals, /budgets
   v1.use('/', requireAuth, moneyRoutes); // /bills, /subscriptions, /accounts, /networth, /analytics, /notifications, /export
+  v1.use('/', requireAuth, wealthRoutes); // /assets, /liabilities
   v1.use('/ai', requireAuth, aiRoutes);
   v1.use('/admin', requireAuth, requireAdmin, adminRoutes);
 

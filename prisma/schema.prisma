@@ -39,6 +39,8 @@ model User {
   notifications  Notification[]
   refreshTokens  RefreshToken[]
   transfers      Transfer[]
+  assets         Asset[]
+  liabilities    Liability[]
   billSettings   BillSettings?
   notifPrefs     NotificationPreference?
 }
@@ -266,6 +268,35 @@ model NotificationPreference {
   userId String @unique @db.ObjectId
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   prefs  String @default("{}") // JSON toggles
+}
+
+model Asset {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  category  String   @default("investment") // investment | property | gold | vehicle | business | cash | other
+  value     Int      @default(0)
+  liquid    Boolean  @default(false) // true = counts toward spendable "available balance"
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Liability {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  kind      String   @default("loan") // loan | mortgage | credit_card | other
+  balance   Int      @default(0)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model AuditLog {

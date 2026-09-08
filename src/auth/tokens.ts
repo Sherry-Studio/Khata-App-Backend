@@ -35,6 +35,14 @@ export async function revokeRefreshToken(token: string) {
   await prisma.refreshToken.updateMany({ where: { token }, data: { revoked: true } });
 }
 
+/** Revoke every refresh token for a user, optionally keeping one alive. */
+export async function revokeAllRefreshTokens(userId: string, keepToken?: string) {
+  await prisma.refreshToken.updateMany({
+    where: { userId, revoked: false, ...(keepToken ? { token: { not: keepToken } } : {}) },
+    data: { revoked: true },
+  });
+}
+
 export async function issueSession(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   const accessToken = signAccessToken({ sub: user.id, role: user.role, email: user.email });

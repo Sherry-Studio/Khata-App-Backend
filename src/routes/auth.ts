@@ -4,7 +4,13 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { env } from '../env';
 import { ApiError, asyncHandler } from '../http';
-import { issueSession, revokeRefreshToken, rotateRefreshToken } from '../auth/tokens';
+import {
+  issueSession,
+  revokeAllRefreshTokens,
+  revokeRefreshToken,
+  rotateRefreshToken,
+} from '../auth/tokens';
+import { requireAuth } from '../auth/middleware';
 import { publicUser } from '../serializers';
 import { sendOtpEmail } from '../mailer';
 
@@ -135,10 +141,74 @@ router.post(
       const otp = makeOtp();
       await prisma.user.update({
         where: { id: user.id },
-        data: { otpCode: otp.code, otpExpiresAt: otp.expiresAt },
+        data: { otpCode: otp.code, otpExpiresAt: otp.expiresAt, otpAttempts: 0 },
       });
       sendOtp(user.email, otp.code, 'reset');
     }
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  '/password/reset/confirm',
+  asyncHandler(async (req, res) => {
+    const { email, code, newPassword } = z
+      .object({
+        email: z.string().email(),
+        code: z.string().min(1),
+        newPassword: z.string().min(8),
+      })
+      .parse(req.body);
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user) throw new ApiError(400, 'invalid_code');
+    const staticOk = STATIC_OTP.length > 0 && code === STATIC_OTP;
+    if (
+      !staticOk &&
+      (!user.otpCode || !user.otpExpiresAt || user.otpExpiresAt < new Date() || user.otpCode !== code)
+    ) {
+      throw new ApiError(400, 'invalid_code');
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(newPassword, 10),
+        otpCode: null,
+        otpExpiresAt: null,
+        otpAttempts: 0,
+        verified: true,
+      },
+    });
+    await revokeAllRefreshTokens(user.id);
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  '/password/change',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = z
+      .object({ currentPassword: z.string().min(1), newPassword: z.string().min(8) })
+      .parse(req.body);
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
+    if (!user.passwordHash) throw new ApiError(400, 'no_password_set'); // Google-only account
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new ApiError(400, 'wrong_password');
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+    });
+    await revokeAllRefreshTokens(user.id);
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  '/logout/all',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await revokeAllRefreshTokens(req.userId!);
     res.status(204).end();
   }),
 );

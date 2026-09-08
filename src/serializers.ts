@@ -1,11 +1,13 @@
 import type {
   Account,
+  Asset,
   Bill,
   Budget,
   Goal,
   Group,
   GroupExpense,
   GroupMember,
+  Liability,
   Notification,
   Subscription,
   Transaction,
@@ -84,6 +86,31 @@ export function serializeAccount(a: Account): Record<string, unknown> {
     type: a.type,
     meta: `${a.type[0].toUpperCase()}${a.type.slice(1)} · updated ${new Date(a.updatedAt).toDateString()}`,
     amount: a.balance,
+  };
+}
+
+const CAP = (s: string) => s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+
+export function serializeAsset(a: Asset): Record<string, unknown> {
+  return {
+    id: a.id,
+    name: a.name,
+    category: a.category,
+    value: a.value,
+    liquid: a.liquid,
+    note: a.note ?? undefined,
+    meta: `${CAP(a.category)}${a.liquid ? ' · liquid' : ''}`,
+  };
+}
+
+export function serializeLiability(l: Liability): Record<string, unknown> {
+  return {
+    id: l.id,
+    name: l.name,
+    kind: l.kind,
+    balance: l.balance,
+    note: l.note ?? undefined,
+    meta: CAP(l.kind),
   };
 }
 
