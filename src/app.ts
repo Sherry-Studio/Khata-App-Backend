@@ -41,6 +41,12 @@ export function createApp() {
 
   v1.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
+  // Public runtime config the app reads on launch (so Google sign-in can be
+  // switched on by setting an env var, with no app rebuild).
+  v1.get('/config', (_req, res) =>
+    res.json({ googleClientId: env.googleClientId || '' }),
+  );
+
   v1.use('/auth', authRoutes);
   v1.use('/me', requireAuth, meRoutes);
   v1.use('/transactions', requireAuth, txRoutes);
