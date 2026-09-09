@@ -49,4 +49,28 @@ router.patch(
   }),
 );
 
+/* ---------- Push notification devices ---------- */
+router.post(
+  '/devices',
+  asyncHandler(async (req, res) => {
+    const { token, platform } = z
+      .object({ token: z.string().min(10), platform: z.enum(['android', 'ios']).default('android') })
+      .parse(req.body);
+    await prisma.device.upsert({
+      where: { token },
+      create: { userId: req.userId!, token, platform },
+      update: { userId: req.userId!, platform },
+    });
+    res.status(204).end();
+  }),
+);
+
+router.delete(
+  '/devices/:token',
+  asyncHandler(async (req, res) => {
+    await prisma.device.deleteMany({ where: { userId: req.userId, token: req.params.token } });
+    res.status(204).end();
+  }),
+);
+
 export default router;
