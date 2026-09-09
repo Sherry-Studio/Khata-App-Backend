@@ -6,17 +6,28 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const SYSTEM = `You are the money assistant inside "Khata+", a personal finance app for Pakistan.
 Answer ONLY from the JSON figures provided in the user message. Never invent numbers
-and do not do arithmetic beyond what the figures already state.
+and do not do arithmetic beyond what the figures already state. If the figures do not
+contain what was asked (e.g. a category the user never logged), say so plainly in the
+lead and leave rows empty rather than guessing.
 All amounts are integer PKR (Pakistani rupees) — write them as "Rs 27,190", never "$".
-Be concise and practical.
+Be concise, warm and practical. It is a running conversation — earlier turns are given
+for context, so "and last month?" or "why?" should be understood in that light.
 Do NOT give specific investment, stock, or crypto advice — suggest budgeting/saving habits instead.
-Reply in the user's locale when given (en = English, ur = Urdu, ur-roman = Roman Urdu).
+
+LANGUAGE — write EVERY string you return (lead, row labels, tail, action, followups) in
+the user's locale, and nothing else:
+- en        → natural English.
+- ur-roman  → Roman Urdu (Urdu written in Latin letters, the way Pakistanis text):
+              e.g. "Is mahine aap ne Rs 12,000 kharch kiye." Keep "Rs" and digits as-is.
+- ur        → Urdu script (اردو). Keep "Rs" and Western digits as-is.
+Match the locale even for a one-word question. Do not mix languages.
+
 Return ONLY the structured object:
-- lead: one short sentence introducing the answer.
-- rows: 2-5 [label, amount] pairs of the most relevant figures (amount is an integer).
+- lead: one short sentence introducing the answer (in the locale).
+- rows: 0-5 [label, amount] pairs of the most relevant figures (amount is an integer). May be empty.
 - tail: one short sentence of context or the key takeaway.
 - action: one concrete suggested next step.
-- followups: 2-3 short follow-up questions the user might ask next.`;
+- followups: 2-3 short follow-up questions the user might ask next, phrased in the locale.`;
 
 // Gemini's responseSchema is proto-based: `items` must be a single schema
 // (no JSON-Schema tuples), so rows come back as {label, amount} objects and
@@ -40,16 +51,28 @@ const responseSchema = {
   required: ['lead', 'rows', 'tail', 'action', 'followups'],
 };
 
+export type AiTurn = { role: 'user' | 'ai'; text: string };
+
 export async function answerWithGemini(
   question: string,
   ctx: AiContext,
   locale: string,
+  history: AiTurn[] = [],
 ): Promise<AiAnswer> {
   if (!env.geminiApiKey) throw new Error('gemini_not_configured');
+
+  const priorTurns = history
+    .slice(-6)
+    .filter((t) => t.text?.trim())
+    .map((t) => ({
+      role: t.role === 'ai' ? 'model' : 'user',
+      parts: [{ text: t.text.slice(0, 500) }],
+    }));
 
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM }] },
     contents: [
+      ...priorTurns,
       {
         role: 'user',
         parts: [
@@ -70,9 +93,10 @@ export async function answerWithGemini(
   const timer = setTimeout(() => controller.abort(), 20_000);
   let res: Response;
   try {
-    res = await fetch(`${ENDPOINT}/${env.geminiModel}:generateContent?key=${env.geminiApiKey}`, {
+    res = await fetch(`${ENDPOINT}/${env.geminiModel}:generateContent`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      // header auth works for both classic "AIza…" keys and the newer "AQ.…" format
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': env.geminiApiKey },
       body: JSON.stringify(body),
       signal: controller.signal,
     });

@@ -29,26 +29,31 @@ router.get(
 router.post(
   '/ask',
   asyncHandler(async (req, res) => {
-    const { question, locale } = z
-      .object({ question: z.string().min(1).max(500), locale: z.string().default('en') })
+    const { question, locale, history } = z
+      .object({
+        question: z.string().min(1).max(500),
+        locale: z.string().default('en'),
+        history: z
+          .array(z.object({ role: z.enum(['user', 'ai']), text: z.string().max(500) }))
+          .max(20)
+          .optional(),
+      })
       .parse(req.body);
     rateLimit(req.userId!);
 
     const ctx = await buildAiContext(req.userId!);
 
-    let answer = answerWithRules(question, ctx);
-    let provider: 'rules' | 'gemini' = 'rules';
-
+    // Gemini is primary; the deterministic rules engine is the fallback only.
     if (env.aiProvider === 'gemini' && env.geminiApiKey) {
       try {
-        answer = await answerWithGemini(question, ctx, locale);
-        provider = 'gemini';
+        const answer = await answerWithGemini(question, ctx, locale, history ?? []);
+        return res.json({ ...answer, provider: 'gemini' });
       } catch (e) {
         console.warn('[ai] gemini failed, using rules:', (e as Error).message);
       }
     }
 
-    res.json({ ...answer, provider });
+    res.json({ ...answerWithRules(question, ctx), provider: 'rules' });
   }),
 );
 
