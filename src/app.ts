@@ -17,6 +17,7 @@ import moneyRoutes from './routes/money';
 import wealthRoutes from './routes/wealth';
 import aiRoutes from './routes/ai';
 import adminRoutes from './routes/admin';
+import cronRoutes from './routes/cron';
 
 export function createApp() {
   const app = express();
@@ -58,6 +59,7 @@ export function createApp() {
   v1.use('/', requireAuth, wealthRoutes); // /assets, /liabilities
   v1.use('/ai', requireAuth, aiRoutes);
   v1.use('/admin', requireAuth, requireAdmin, adminRoutes);
+  v1.use('/cron', cronRoutes); // secret-guarded inside, not requireAuth
 
   app.use(base, v1);
 

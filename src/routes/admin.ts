@@ -7,6 +7,7 @@ import { publicUser } from '../serializers';
 import { profileAggregates } from '../util/aggregates';
 import { startOfMonth } from '../util/format';
 import { issueSession } from '../auth/tokens';
+import { sendToUser } from '../push/fcm';
 
 const router = Router();
 
@@ -260,6 +261,7 @@ router.post(
     const b = z
       .object({
         kind: z.string().min(1),
+        title: z.string().min(1).optional(),
         body: z.string().min(1),
         tone: z.enum(['warn', 'accent', 'pos']).default('accent'),
         userId: z.string().optional(),
@@ -271,6 +273,12 @@ router.post(
     await prisma.notification.createMany({
       data: targets.map((u) => ({ userId: u.id, kind: b.kind, body: b.body, tone: b.tone })),
     });
+    // fire device push too (best-effort, in batches)
+    for (const u of targets) {
+      sendToUser(u.id, { title: b.title ?? 'Khata', body: b.body, data: { kind: b.kind } }).catch(
+        () => {},
+      );
+    }
     await audit(req, 'notification.broadcast', b.userId, { count: targets.length });
     res.json({ delivered: targets.length });
   }),

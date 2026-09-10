@@ -32,4 +32,11 @@ export const env = {
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
   geminiModel: process.env.GEMINI_MODEL ?? 'gemini-flash-lite-latest',
   aiRatePerMin: parseInt(process.env.AI_RATE_PER_MIN ?? '10', 10),
+
+  // Firebase Cloud Messaging. Paste the whole service-account JSON as one env
+  // var. If unset, push is a no-op (in-app notifications still work).
+  fcmServiceAccount: process.env.FIREBASE_SERVICE_ACCOUNT ?? '',
+  // shared secret the /cron/* routes require (Vercel Cron sends it as a header
+  // via the crons config, or set it and call the URL yourself).
+  cronSecret: process.env.CRON_SECRET ?? '',
 };
