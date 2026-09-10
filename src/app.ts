@@ -48,6 +48,7 @@ export function createApp() {
     res.json({ googleClientId: env.googleClientId || '' }),
   );
 
+  v1.use('/cron', cronRoutes); // secret-guarded inside; must be before the '/' catch-alls
   v1.use('/auth', authRoutes);
   v1.use('/me', requireAuth, meRoutes);
   v1.use('/transactions', requireAuth, txRoutes);
@@ -59,7 +60,6 @@ export function createApp() {
   v1.use('/', requireAuth, wealthRoutes); // /assets, /liabilities
   v1.use('/ai', requireAuth, aiRoutes);
   v1.use('/admin', requireAuth, requireAdmin, adminRoutes);
-  v1.use('/cron', cronRoutes); // secret-guarded inside, not requireAuth
 
   app.use(base, v1);
 
