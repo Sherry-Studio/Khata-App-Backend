@@ -98,4 +98,48 @@ router.get(
   }),
 );
 
+/** Weekly spending digest — run this on a weekly Vercel Cron. */
+router.get(
+  '/digest',
+  asyncHandler(async (_req, res) => {
+    const weekAgo = new Date(Date.now() - 7 * DAY);
+    const prevWeek = new Date(Date.now() - 14 * DAY);
+    const users = await prisma.user.findMany({ where: { disabled: false }, select: { id: true } });
+    let sent = 0;
+
+    for (const u of users) {
+      const [thisWeek, lastWeek] = await Promise.all([
+        prisma.transaction.findMany({ where: { userId: u.id, kind: 'expense', date: { gte: weekAgo } } }),
+        prisma.transaction.findMany({
+          where: { userId: u.id, kind: 'expense', date: { gte: prevWeek, lt: weekAgo } },
+        }),
+      ]);
+      if (thisWeek.length === 0) continue;
+
+      const spent = thisWeek.reduce((n, t) => n + t.amount, 0);
+      const prev = lastWeek.reduce((n, t) => n + t.amount, 0);
+      const byCat = new Map<string, number>();
+      for (const t of thisWeek) byCat.set(t.category, (byCat.get(t.category) ?? 0) + t.amount);
+      const top = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0];
+
+      const delta =
+        prev > 0
+          ? ` — ${spent >= prev ? 'up' : 'down'} ${Math.round((Math.abs(spent - prev) / prev) * 100)}% on last week`
+          : '';
+      const body = `You spent ${money(spent)} this week${delta}. Biggest: ${top?.[0] ?? '—'} at ${money(top?.[1] ?? 0)}.`;
+
+      const ok = await notify(u.id, {
+        kind: 'digest',
+        title: 'Your week in money',
+        body,
+        tone: 'accent',
+        data: { screen: 'Insights' },
+        dedupeHours: 24 * 5,
+      });
+      if (ok) sent++;
+    }
+    res.json({ ok: true, sent, users: users.length });
+  }),
+);
+
 export default router;

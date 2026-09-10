@@ -5,6 +5,7 @@ import { env } from '../env';
 import { buildAiContext } from '../ai/context';
 import { answerWithRules } from '../ai/rules';
 import { answerWithGemini } from '../ai/gemini';
+import { parseEntry } from '../ai/parse';
 import { SUGGESTED_QUESTIONS } from '../ai/types';
 
 const router = Router();
@@ -54,6 +55,24 @@ router.post(
     }
 
     res.json({ ...answerWithRules(question, ctx), provider: 'rules' });
+  }),
+);
+
+/** Natural-language quick-add: "chai 200 cash" -> a structured entry to confirm. */
+router.post(
+  '/parse',
+  asyncHandler(async (req, res) => {
+    const { text } = z.object({ text: z.string().min(1).max(200) }).parse(req.body);
+    rateLimit(req.userId!);
+    if (env.aiProvider !== 'gemini' || !env.geminiApiKey) {
+      throw new ApiError(503, 'parser_unavailable');
+    }
+    try {
+      res.json(await parseEntry(text));
+    } catch (e) {
+      console.warn('[ai] parse failed:', (e as Error).message);
+      throw new ApiError(422, 'could_not_parse');
+    }
   }),
 );
 
